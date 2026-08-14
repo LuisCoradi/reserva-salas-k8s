@@ -34,6 +34,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Descobrir OIDC Sub
+        run: |
+          TOKEN=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r '.value')
+          node -e "console.log('--- SEU SUB EXATO E: ---'); console.log(JSON.parse(Buffer.from('$TOKEN'.split('.')[1], 'base64').toString()).sub)"
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
