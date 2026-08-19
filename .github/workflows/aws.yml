@@ -32,6 +32,8 @@ jobs:
         run: npm ci
 
       - name: Build
+        env:
+          VITE_API_URL: "http://Reserva-salas-api-env-1.eba-jhsmzcsg.us-east-2.elasticbeanstalk.com"
         run: npm run build
 
       - name: Descobrir OIDC Sub
