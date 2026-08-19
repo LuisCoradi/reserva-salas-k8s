@@ -87,7 +87,7 @@ export default function App() {
 
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
-      <h1>Infraestrutura - Sistema de Reservas</h1>
+      <h1>Infraestrutura</h1>
 
       <div style={{ display: 'flex', gap: '40px', marginTop: '20px' }}>
 
