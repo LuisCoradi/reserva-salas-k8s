@@ -1,0 +1,137 @@
+# Pipeline de CI: a cada push/PR na main, compila a aplicacao, valida os
+# manifestos e sobe o projeto inteiro num Minikube temporario, com os mesmos
+# comandos do README. Se qualquer etapa falhar, a pipeline para.
+name: CI - Kubernetes (Minikube)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Build ${{ matrix.componente }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        componente: [backend, frontend]
+    defaults:
+      run:
+        working-directory: ${{ matrix.componente }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ${{ matrix.componente }}/package-lock.json
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Compilar
+        run: npm run build
+
+  manifestos:
+    name: Validar manifestos Kubernetes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar kubeconform
+        run: curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz -C "$RUNNER_TEMP" kubeconform
+      - name: Validar YAML contra o schema do Kubernetes
+        run: |
+          "$RUNNER_TEMP/kubeconform" -strict -summary k8s/
+          "$RUNNER_TEMP/kubeconform" -strict -summary k8s/opcional/
+
+  minikube:
+    name: Deploy de teste no Minikube
+    needs: [build, manifestos]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar Minikube e kubectl (se faltarem)
+        run: |
+          if ! command -v minikube >/dev/null; then
+            curl -sSLo minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+            sudo install minikube /usr/local/bin/minikube
+          fi
+          if ! command -v kubectl >/dev/null; then
+            curl -sSLo kubectl "https://dl.k8s.io/release/$(curl -sSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            sudo install kubectl /usr/local/bin/kubectl
+          fi
+          minikube version
+          kubectl version --client
+
+      - name: Iniciar Minikube
+        run: minikube start --driver=docker --wait=all
+
+      - name: Build das imagens dentro do Minikube
+        run: |
+          minikube image build -t reserva-backend:1.0 ./backend
+          minikube image build -t reserva-frontend:1.0 ./frontend
+          minikube image ls | grep reserva
+
+      - name: Aplicar manifestos
+        run: kubectl apply -f k8s/
+
+      - name: Aguardar os Deployments
+        run: |
+          kubectl rollout status deployment/postgres --timeout=180s
+          kubectl rollout status deployment/backend --timeout=240s
+          kubectl rollout status deployment/frontend --timeout=120s
+
+      - name: Estado do cluster
+        run: |
+          kubectl get pods -o wide
+          kubectl get services
+          kubectl get deployments
+
+      - name: Teste de fumaca (front, API e banco)
+        run: |
+          URL=$(minikube service frontend --url)
+          echo "URL da aplicacao: $URL"
+          HTML=$(curl -fsS "$URL/")
+          grep -q 'id="root"' <<< "$HTML"
+          curl -fsS "$URL/api/health"
+          echo
+          curl -fsS -X POST -H 'Content-Type: application/json' \
+            -d '{"nome":"Unidade CI","descricao":"criada pela pipeline"}' "$URL/api/unidades"
+          echo
+          UNIDADES=$(curl -fsS "$URL/api/unidades")
+          grep -q 'Unidade CI' <<< "$UNIDADES"
+
+      - name: Balanceamento de carga entre os pods do backend
+        run: |
+          URL=$(minikube service frontend --url)
+          for i in $(seq 20); do
+            curl -fsS "$URL/api/" | sed 's/.*"pod":"\([^"]*\)".*/\1/'
+          done | sort | uniq -c | tee pods.txt
+          test "$(wc -l < pods.txt)" -ge 2
+
+      - name: Recriacao automatica de pod
+        run: |
+          POD=$(kubectl get pods -l app=backend -o jsonpath='{.items[0].metadata.name}')
+          echo "Excluindo $POD"
+          kubectl delete pod "$POD"
+          PRONTOS=0
+          for i in $(seq 60); do
+            PRONTOS=$(kubectl get deployment backend -o jsonpath='{.status.readyReplicas}')
+            [ "$PRONTOS" = "3" ] && break
+            sleep 2
+          done
+          kubectl get pods -l app=backend
+          test "$PRONTOS" = "3"
+
+      - name: Diagnostico (so em caso de falha)
+        if: failure()
+        run: |
+          kubectl get all || true
+          kubectl describe pods || true
+          kubectl logs -l app=backend --all-containers --tail=50 || true

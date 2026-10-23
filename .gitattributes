@@ -1,0 +1,5 @@
+# Mantem LF nos arquivos de texto mesmo clonando no Windows
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary

@@ -1,0 +1,17 @@
+# Service do banco. ClusterIP = so existe dentro do cluster.
+# O backend acessa por "postgres:5432"; de fora do cluster nao ha acesso.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    projeto: reserva-salas
+    app: postgres
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432

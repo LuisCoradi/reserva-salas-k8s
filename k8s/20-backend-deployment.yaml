@@ -1,0 +1,76 @@
+# API (Node.js + Express + Prisma) com 3 replicas.
+# O Service "backend" distribui as requisicoes entre elas.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels:
+    projeto: reserva-salas
+    app: backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        projeto: reserva-salas
+        app: backend
+    spec:
+      enableServiceLinks: false
+      # Espera o banco aceitar conexoes antes de subir a API
+      initContainers:
+        - name: espera-postgres
+          image: postgres:15-alpine
+          command:
+            - sh
+            - -c
+            - until pg_isready -h "$DB_HOST" -p "$DB_PORT"; do echo "aguardando o banco..."; sleep 2; done
+          envFrom:
+            - configMapRef:
+                name: reserva-config
+      containers:
+        - name: backend
+          image: reserva-backend:1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: reserva-config       # PORT, NODE_ENV, DB_HOST, DB_PORT, POSTGRES_DB
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: reserva-secret
+                  key: POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: reserva-secret
+                  key: POSTGRES_PASSWORD
+            # Monta a string de conexao a partir do ConfigMap e do Secret
+            - name: DATABASE_URL
+              value: postgresql://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(POSTGRES_DB)?schema=public
+          # So entra no balanceamento quando consegue falar com o banco
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          # Se o processo travar, o Kubernetes reinicia o container
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

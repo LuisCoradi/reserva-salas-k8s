@@ -1,0 +1,73 @@
+# OPCIONAL - firewall entre os pods (NetworkPolicy).
+# So tem efeito se o Minikube for iniciado com um CNI que suporte NetworkPolicy:
+#   minikube start --driver=docker --cni=calico
+# Aplicar com: kubectl apply -f k8s/opcional/
+#
+# Regras: bloqueia toda entrada nos pods do projeto e libera so o necessario
+#   qualquer origem -> frontend:80
+#   frontend        -> backend:3000
+#   backend         -> postgres:5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bloqueia-tudo
+spec:
+  podSelector:
+    matchLabels:
+      projeto: reserva-salas
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: libera-frontend
+spec:
+  podSelector:
+    matchLabels:
+      app: frontend
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-so-do-frontend
+spec:
+  podSelector:
+    matchLabels:
+      app: backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: frontend
+      ports:
+        - protocol: TCP
+          port: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-so-do-backend
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: backend
+      ports:
+        - protocol: TCP
+          port: 5432

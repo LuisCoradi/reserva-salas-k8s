@@ -1,0 +1,17 @@
+# Service do backend. ClusterIP = sem acesso direto de fora do cluster.
+# O frontend (nginx) chama "http://backend:3000" e o Service escolhe um dos pods.
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  labels:
+    projeto: reserva-salas
+    app: backend
+spec:
+  type: ClusterIP
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000

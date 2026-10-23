@@ -1,0 +1,16 @@
+# Configuracoes NAO sensiveis da aplicacao.
+# Usado pelo banco (nome do banco), pelo backend (porta, host do banco)
+# e pelo frontend (para onde o nginx encaminha /api).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: reserva-config
+  labels:
+    projeto: reserva-salas
+data:
+  POSTGRES_DB: reserva_salas
+  DB_HOST: postgres          # nome do Service do banco (DNS interno do cluster)
+  DB_PORT: "5432"
+  PORT: "3000"               # porta em que a API escuta
+  NODE_ENV: production
+  BACKEND_URL: http://backend:3000   # nome do Service do backend

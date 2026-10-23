@@ -1,0 +1,15 @@
+# Volume persistente do banco: os dados sobrevivem a exclusao do pod.
+# No Minikube o StorageClass padrao ("standard") cria o volume sozinho.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  labels:
+    projeto: reserva-salas
+    app: postgres
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
