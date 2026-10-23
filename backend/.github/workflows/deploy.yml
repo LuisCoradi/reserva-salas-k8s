@@ -1,0 +1,40 @@
+name: Deploy Backend to Elastic Beanstalk
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout do código
+      uses: actions/checkout@v3
+
+    - name: Criar pacote .zip
+      run: |
+        zip -r deploy.zip \
+          Dockerfile \
+          package.json \
+          package-lock.json \
+          prisma \
+          prisma.config.ts \
+          src \
+          tsconfig.json \
+          -x "*.git*" \
+          -x "node_modules/*" \
+          -x ".env"
+
+    - name: Deploy no Elastic Beanstalk
+      uses: einaregilsson/beanstalk-deploy@v22
+      with:
+        aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        application_name: reserva-salas-api
+        environment_name: Reserva-salas-api-env-1
+        version_label: "deploy-${{ github.sha }}"
+        region: us-east-2
+        deployment_package: deploy.zip
+        use_existing_version_if_available: true

@@ -1,0 +1,40 @@
+{
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.1.2",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "pg": "^8.22.0",
+    "tsx": "^4.23.5",
+    "typescript": "^7.0.2"
+  },
+  "name": "cloud-devops",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "postinstall": "prisma generate",
+    "start": "tsx src/server.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Surfle/Cloud-DevOps.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/Surfle/Cloud-DevOps/issues"
+  },
+  "homepage": "https://github.com/Surfle/Cloud-DevOps#readme",
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/pg": "^8.20.4",
+    "prisma": "^7.9.1"
+  }
+}
