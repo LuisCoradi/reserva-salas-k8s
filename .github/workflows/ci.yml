@@ -111,7 +111,7 @@ jobs:
         run: |
           URL=$(minikube service frontend --url)
           for i in $(seq 20); do
-            curl -fsS "$URL/api/" | sed 's/.*"pod":"\([^"]*\)".*/\1/'
+            curl -fsS "$URL/api/" | grep -o '"pod":"[^"]*"'
           done | sort | uniq -c | tee pods.txt
           test "$(wc -l < pods.txt)" -ge 2
 
