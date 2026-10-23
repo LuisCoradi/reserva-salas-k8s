@@ -3,11 +3,21 @@ import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { hostname } from 'node:os';
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+// [Kubernetes] Nome do pod que atendeu a requisicao.
+// Dentro do Kubernetes o hostname do container e o nome do pod,
+// entao isso mostra o balanceamento de carga entre as replicas.
+const POD = hostname();
+app.use((_req, res, next) => {
+  res.setHeader('X-Pod', POD);
+  next();
+});
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -28,7 +38,19 @@ const PORT = Number(process.env.PORT) || 8080;
 app.get('/', (req, res) => {
   res.status(200).json({
     message: 'Reserva de Salas API está rodando perfeitamente! 🚀',
+    pod: POD,
   });
+});
+
+// [Kubernetes] Health check usado pela readinessProbe:
+// so recebe trafego do Service quando consegue falar com o banco.
+app.get('/health', async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.status(200).json({ status: 'ok', banco: 'ok', pod: POD });
+  } catch (error) {
+    res.status(503).json({ status: 'erro', banco: 'indisponivel', pod: POD });
+  }
 });
 
 // --- UNIDADE ---
@@ -215,8 +237,19 @@ async function startServer() {
     await prisma.$connect();
     console.log('Conectado ao PostgreSQL com sucesso!');
     
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Servidor rodando na porta ${PORT}`);
+    const server = app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Servidor rodando na porta ${PORT} (pod ${POD})`);
+    });
+
+    // [Kubernetes] Ao excluir o pod (ou num rollout), o Kubernetes envia SIGTERM.
+    // Fecha o servidor e as conexoes com o banco antes de sair.
+    process.on('SIGTERM', () => {
+      console.log('SIGTERM recebido, encerrando...');
+      server.close(async () => {
+        await prisma.$disconnect().catch(() => {});
+        await pool.end().catch(() => {});
+        process.exit(0);
+      });
     });
   } catch (error) {
     console.error('Falha ao conectar no banco de dados:', error);

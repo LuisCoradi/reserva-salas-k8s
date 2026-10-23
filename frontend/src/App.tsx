@@ -10,19 +10,23 @@ export default function App() {
   const [setores, setSetores] = useState<any[]>([]);
   const [salas, setSalas] = useState<any[]>([]);
   const [reservas, setReservas] = useState<any[]>([]);
+  // [Kubernetes] nome do pod do backend que respondeu
+  const [podApi, setPodApi] = useState<string>('');
 
   useEffect(() => {
     carregarTudo();
   }, []);
 
   const carregarTudo = async () => {
-    const [resUnidades, resSetores, resSalas, resReservas] = await Promise.all([
+    const [resStatus, resUnidades, resSetores, resSalas, resReservas] = await Promise.all([
+      api.get('/'),
       api.get('/unidades'),
       api.get('/setores'),
       api.get('/salas'),
       api.get('/reservas')
     ]);
 
+    setPodApi(resStatus.data.pod);
     setUnidades(resUnidades.data);
     setSetores(resSetores.data);
     setSalas(resSalas.data);
@@ -88,6 +92,9 @@ export default function App() {
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
       <h1>Infraestrutura</h1>
+      <p style={{ color: '#666' }}>
+        Resposta da API servida pelo pod: <b>{podApi || '...'}</b>
+      </p>
 
       <div style={{ display: 'flex', gap: '40px', marginTop: '20px' }}>
 

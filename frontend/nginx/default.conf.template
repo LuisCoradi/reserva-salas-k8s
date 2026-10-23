@@ -1,0 +1,38 @@
+# Configuracao do nginx do frontend.
+# Este arquivo e um template: ao iniciar o container, a imagem oficial do nginx
+# troca ${BACKEND_URL} pelo valor da variavel de ambiente (vinda do ConfigMap).
+
+server {
+    listen 80;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Mostra qual pod do frontend respondeu (demonstracao do balanceamento)
+    add_header X-Frontend-Pod $hostname always;
+
+    # Usado pelas probes do Kubernetes
+    location = /healthz {
+        access_log off;
+        return 200 "ok\n";
+    }
+
+    # API: o navegador chama /api/... e o nginx repassa para o Service "backend".
+    # O "/" no final do proxy_pass remove o prefixo /api (ex.: /api/salas -> /salas).
+    # Sem keepalive: cada requisicao abre uma conexao nova e o Service
+    # (kube-proxy) escolhe um pod do backend a cada vez.
+    location /api/ {
+        proxy_pass ${BACKEND_URL}/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 30s;
+    }
+
+    # SPA (React): qualquer rota desconhecida devolve o index.html
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
