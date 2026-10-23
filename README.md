@@ -362,8 +362,8 @@ minikube delete            # apaga o cluster inteiro
 
 ## Integrantes
 
-| Nome | Papel |
-|---|---|
-| | |
-| | |
-| | |
+| Nome |
+|------|
+|Luis Felipe Coradi| 
+|Rubens Miguel| 
+|Guilherme Royer| 
