@@ -10,26 +10,51 @@ A aplicação não foi reescrita. O código veio dos repositórios do Mensal 1 (
 
 ```mermaid
 flowchart LR
-    U["Navegador"] -->|"minikube service<br/>NodePort 30080"| SF
+    U["Navegador<br/>(fora do cluster)"]
 
     subgraph K["Cluster Minikube"]
-        SF["Service frontend<br/>NodePort :80"] --> F1["Pod frontend 1<br/>nginx"]
-        SF --> F2["Pod frontend 2<br/>nginx"]
+        SF["Service frontend<br/>NodePort 30080 → 80/TCP"]
 
-        F1 -->|"/api → http://backend:3000"| SB
-        F2 -->|"/api → http://backend:3000"| SB
+        subgraph DF["Deployment frontend · 2 réplicas"]
+            F1["Pod frontend 1<br/>nginx :80"]
+            F2["Pod frontend 2<br/>nginx :80"]
+        end
 
-        SB["Service backend<br/>ClusterIP :3000"] --> B1["Pod backend 1"]
-        SB --> B2["Pod backend 2"]
-        SB --> B3["Pod backend 3"]
+        SB["Service backend<br/>ClusterIP 3000/TCP"]
 
-        B1 -->|"postgres:5432"| SP
-        B2 --> SP
-        B3 --> SP
+        subgraph DB["Deployment backend · 3 réplicas"]
+            B1["Pod backend 1<br/>Node.js :3000"]
+            B2["Pod backend 2<br/>Node.js :3000"]
+            B3["Pod backend 3<br/>Node.js :3000"]
+        end
 
-        SP["Service postgres<br/>ClusterIP :5432"] --> P["Pod postgres"]
-        P --- V[("PVC postgres-data<br/>1Gi")]
+        SP["Service postgres<br/>ClusterIP 5432/TCP"]
+
+        subgraph DP["Deployment postgres · 1 réplica"]
+            P["Pod postgres<br/>PostgreSQL 15 :5432"]
+        end
+
+        V[("PVC postgres-data<br/>1Gi")]
     end
+
+    U -->|"HTTP · túnel do minikube service"| SF
+    SF --> F1
+    SF --> F2
+    F1 -->|"HTTP /api → backend:3000"| SB
+    F2 --> SB
+    SB --> B1
+    SB --> B2
+    SB --> B3
+    B1 -->|"TCP 5432 · postgres:5432"| SP
+    B2 --> SP
+    B3 --> SP
+    SP --> P
+    P --- V
+
+    U -. "✗ bloqueado (ClusterIP)" .-x SB
+    U -. "✗ bloqueado (ClusterIP)" .-x SP
+
+    linkStyle 13,14 stroke:#c62828,stroke-width:2px;
 ```
 
 Versão em imagem para a apresentação: [`docs/arquitetura.png`](docs/arquitetura.png).
@@ -40,6 +65,19 @@ Versão em imagem para a apresentação: [`docs/arquitetura.png`](docs/arquitetu
 | Backend (API Node.js/Express/Prisma) | Deployment `backend` | 3 | `backend` **ClusterIP** | 3000 | `reserva-backend:1.0` |
 | Banco (PostgreSQL 15) | Deployment `postgres` + PVC | 1 | `postgres` **ClusterIP** | 5432 | `postgres:15-alpine` |
 | Configuração | ConfigMap `reserva-config`, ConfigMap `postgres-init`, Secret `reserva-secret` | | | | |
+
+**Fluxos permitidos e bloqueados**
+
+| Origem | Destino | Porta / protocolo | Situação |
+|---|---|---|---|
+| Navegador | Service `frontend` | 30080/TCP (HTTP), pelo `minikube service` | ✅ Permitido: único ponto de entrada |
+| Pod frontend (nginx) | Service `backend` | 3000/TCP (HTTP) | ✅ Permitido |
+| Pod backend | Service `postgres` | 5432/TCP (protocolo PostgreSQL) | ✅ Permitido |
+| Fora do cluster | `backend` | 3000/TCP | ❌ Bloqueado: Service ClusterIP, sem porta no nó |
+| Fora do cluster | `postgres` | 5432/TCP | ❌ Bloqueado: Service ClusterIP, sem porta no nó |
+| Pod frontend | `postgres` | 5432/TCP | ❌ Bloqueado só com a NetworkPolicy opcional (ver abaixo) |
+
+A prova está no `kubectl get services`: só o `frontend` aparece com porta no nó (`80:30080/TCP`); `backend` e `postgres` mostram só a porta interna.
 
 **Como os componentes se comunicam**
 
@@ -71,7 +109,7 @@ k8s/                     manifestos aplicados com "kubectl apply -f k8s/"
   30..31-frontend-*      Deployment (2 réplicas) e Service do frontend
   opcional/              NetworkPolicy (precisa de --cni=calico)
 .github/workflows/ci.yml pipeline que testa tudo num Minikube a cada push
-docs/                    roteiro da apresentação e diagrama
+docs/                    diagrama da arquitetura
 evidencias/              prints da execução
 ```
 
